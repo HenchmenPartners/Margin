@@ -402,4 +402,131 @@
                         <div class="space-y-1 mt-3">
                             <div class="flex justify-between text-sm">
                                 <span class="text-slate-400">Options Margin Req:</span>
-                                <span class="fo
+                                <span class="font-medium">${fmt.format(scen.crashCalc.req)}</span>
+                            </div>
+                            <div class="flex justify-between text-sm font-bold border-t border-slate-700/50 pt-2 mt-2">
+                                <span class="${scen.preAssignDeficit > 0 ? 'text-red-400' : 'text-emerald-400'}">Cash Needed to Add:</span>
+                                <span class="${scen.preAssignDeficit > 0 ? 'text-red-500' : 'text-emerald-400'}">${fmt.format(scen.preAssignDeficit)}</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 p-2 bg-slate-900 rounded text-xs font-mono text-slate-400 ${showMath ? 'block' : 'hidden'}">
+                            <div>${scen.crashCalc.strA}</div>
+                            <div>${scen.crashCalc.strB}</div>
+                            <div class="mt-1 text-red-400">Deficit: ${fmt.format(scen.crashCalc.req)} Req - ${fmt.format(metrics.cash)} Cash = ${fmt.format(scen.preAssignDeficit)}</div>
+                        </div>
+                    </div>
+                `;
+
+                // Generate Step 3 Cards (Post-Assignment)
+                s3Container.innerHTML += `
+                    <div class="bg-slate-900/80 p-4 rounded-xl border ${scen.assignDeficit > 0 ? 'border-red-900/50 shadow-[0_0_15px_rgba(239,68,68,0.15)]' : 'border-slate-700'}">
+                        <div class="flex justify-between items-center mb-3 border-b border-slate-700/50 pb-2">
+                            <span class="text-sm font-bold text-slate-300">-${(scen.drop * 100).toFixed(0)}% Drop Scenario</span>
+                        </div>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Account Equity</span>
+                                <span class="${scen.equity < 0 ? 'text-red-400 font-medium' : 'text-emerald-400 font-medium'}">${fmt.format(scen.equity)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">${(metrics.maintPct * 100).toFixed(0)}% Maint. Requirement</span>
+                                <span class="text-slate-300">${fmt.format(scen.maintenanceReq)}</span>
+                            </div>
+                            <div class="flex justify-between font-bold pt-2 border-t border-slate-700 mt-2 text-base">
+                                <span class="${scen.assignDeficit > 0 ? 'text-red-400' : 'text-emerald-400'}">Cash Needed to Add:</span>
+                                <span class="${scen.assignDeficit > 0 ? 'text-red-500' : 'text-emerald-400'}">${fmt.format(scen.assignDeficit)}</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 p-2 bg-slate-800 rounded text-xs font-mono text-slate-400 ${showMath ? 'block' : 'hidden'}">
+                            <div>Cost to Buy: ${fmt.format(scen.costToBuy)}</div>
+                            <div>Loan: ${fmt.format(scen.costToBuy)} - ${fmt.format(metrics.cash)} Cash = ${fmt.format(scen.loan)}</div>
+                            <div>Mkt Value: ${fmt.format(scen.marketValue)}</div>
+                            <div>Equity: ${fmt.format(scen.marketValue)} - ${fmt.format(scen.loan)} Loan = ${fmt.format(scen.equity)}</div>
+                            <div>Req: ${fmt.format(scen.marketValue)} * ${(metrics.maintPct * 100).toFixed(0)}% = ${fmt.format(scen.maintenanceReq)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function switchStep(step) {
+            currentStep = step;
+            
+            // Handle content visibility
+            document.querySelectorAll('.step-content').forEach((el, index) => {
+                if (index + 1 === step) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+
+            // Handle indicators
+            for (let i = 1; i <= 3; i++) {
+                const ind = document.getElementById(`ind-${i}`);
+                if (i <= step) {
+                    ind.classList.remove('bg-slate-700');
+                    ind.classList.add('bg-blue-500');
+                } else {
+                    ind.classList.add('bg-slate-700');
+                    ind.classList.remove('bg-blue-500');
+                }
+            }
+
+            // Handle buttons
+            const btnPrev = document.getElementById('btnPrev');
+            const btnNext = document.getElementById('btnNext');
+
+            if (step === 1) {
+                btnPrev.disabled = true;
+                btnPrev.classList.add('opacity-50', 'cursor-not-allowed');
+                btnNext.innerHTML = 'Next Phase <i class="ph ph-arrow-right inline-block align-middle ml-1"></i>';
+                btnNext.disabled = false;
+                btnNext.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else if (step === 3) {
+                btnPrev.disabled = false;
+                btnPrev.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnNext.innerHTML = 'End of Scenario';
+                btnNext.disabled = true;
+                btnNext.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                btnPrev.disabled = false;
+                btnPrev.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnNext.innerHTML = 'Next Phase <i class="ph ph-arrow-right inline-block align-middle ml-1"></i>';
+                btnNext.disabled = false;
+                btnNext.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            // Trigger animation reflow by slightly delaying update
+            setTimeout(updateUI, 50);
+        }
+
+        function nextStep() {
+            if (currentStep < 3) switchStep(currentStep + 1);
+        }
+
+        function prevStep() {
+            if (currentStep > 1) switchStep(currentStep - 1);
+        }
+
+        function startSimulation() {
+            switchStep(1);
+            updateUI();
+        }
+
+        // Initialize on load
+        window.onload = () => {
+            startSimulation();
+            
+            // Add event listeners to inputs to live-update if on current screen
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    updateUI();
+                });
+            });
+        };
+
+    </script>
+</body>
+</html>
