@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naked Put Margin Call Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7); /* Slate 800 with opacity */
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .bar-container {
+            width: 100%;
+            height: 32px;
+            background-color: #334155;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-equity {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+            transition: width 0.5s ease-in-out;
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .bar-equity-negative {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
+            transition: width 0.5s ease-in-out;
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: 10;
+        }
+
+        .bar-req {
+            height: 100%;
+            background: rgba(239, 68, 68, 0.2);
+            transition: width 0.5s ease-in-out;
+            position: absolute;
+            left: 0;
+            top: 0;
+            border-right: 4px solid #ef4444;
+            z-index: 5;
+        }
+
+        .step-content {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out forwards;
+        }
+
+        .step-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        input[type="number"] {
+            color: #f8fafc;
+            background-color: #0f172a;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col items-center">
+
+    <div class="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- LEFT PANEL: Controls -->
+        <div class="glass-panel rounded-2xl p-6 h-fit shadow-2xl">
+            <div class="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
+                <i class="ph ph-sliders text-3xl text-blue-400"></i>
+                <h2 class="text-xl font-semibold">Simulation Parameters</h2>
+            </div>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Account Cash Balance ($)</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                        <input type="number" id="inpCash" value="60000" class="w-full pl-8 pr-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Current Stock Price</label>
+                        <input type="number" id="inpStock" value="550" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Stock Maint. Req (%)</label>
+                        <input type="number" id="inpMaint" value="30" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Put Strike Price</label>
+                        <input type="number" id="inpStrike" value="500" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Premium Recv.</label>
+                        <input type="number" id="inpPremium" value="5" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Contracts Written</label>
+                    <input type="number" id="inpContracts" value="3" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <p class="text-xs text-slate-500 mt-1">1 Contract = 100 Shares</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 border-t border-slate-700 pt-4 mt-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Months Run</label>
+                        <input type="number" id="inpMonths" value="12" class="w-full px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <p class="text-xs text-slate-500 mt-1">For monthly premium</p>
+                    </div>
+                    <div class="flex items-center">
+                        <label class="flex items-center gap-2 cursor-pointer mt-1">
+                            <input type="checkbox" id="chkShowCalc" class="w-5 h-5 rounded border-slate-600 text-blue-500 focus:ring-blue-500" onchange="updateUI()">
+                            <span class="text-sm font-medium text-slate-300">Show Math Details</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button onclick="startSimulation()" class="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg hover:shadow-blue-500/25 transition-all">
+                    Initialize Simulation
+                </button>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Presentation View -->
+        <div class="lg:col-span-2 flex flex-col gap-6">
+            
+            <!-- Navigation Header -->
+            <div class="glass-panel rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                <div class="flex gap-2" id="stepIndicators">
+                    <div class="h-2 w-12 rounded-full bg-blue-500 transition-colors" id="ind-1"></div>
+                    <div class="h-2 w-12 rounded-full bg-slate-700 transition-colors" id="ind-2"></div>
+                    <div class="h-2 w-12 rounded-full bg-slate-700 transition-colors" id="ind-3"></div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="prevStep()" id="btnPrev" class="px-4 py-2 text-sm font-medium border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors opacity-50 cursor-not-allowed" disabled>
+                        Previous
+                    </button>
+                    <button onclick="nextStep()" id="btnNext" class="px-4 py-2 text-sm font-medium bg-white text-slate-900 rounded-lg hover:bg-slate-200 transition-colors">
+                        Next Phase <i class="ph ph-arrow-right inline-block align-middle ml-1"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 1: The Initial Trade -->
+            <div id="step-1" class="step-content active glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-8 opacity-10">
+                    <i class="ph ph-handshake text-9xl"></i>
+                </div>
+                <h3 class="text-sm font-bold text-blue-400 uppercase tracking-wider mb-2">Phase 1</h3>
+                <h2 class="text-3xl font-bold mb-6">The Initial Trade Setup</h2>
+                
+                <p class="text-slate-300 mb-8 max-w-xl text-lg leading-relaxed">
+                    You write naked put contracts. Fidelity calculates a dynamic margin requirement to ensure you have enough capital to cover potential losses. 
+                </p>
+
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <p class="text-xs text-slate-400">Account Cash</p>
+                        <p class="text-xl font-bold text-emerald-400" id="s1-cash">$0</p>
+                    </div>
+                    <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <p class="text-xs text-slate-400">Margin Requirement</p>
+                        <p class="text-xl font-bold text-blue-400" id="s1-req">$0</p>
+                    </div>
+                    <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <p class="text-xs text-slate-400">Annual Return (on Cash)</p>
+                        <p class="text-xl font-bold text-purple-400" id="s1-return">0%</p>
+                    </div>
+                </div>
+                
+                <div id="s1-math" class="bg-slate-900/80 p-3 rounded-lg border border-slate-700 mb-6 text-xs text-slate-400 font-mono hidden">
+                    <!-- JS Injected Math -->
+                </div>
+
+                <div class="space-y-2 relative">
+                    <div class="flex justify-between text-sm font-medium">
+                        <span class="text-emerald-400">Cash vs Requirement Gap</span>
+                        <span id="s1-status" class="text-emerald-400">Healthy Margin</span>
+                    </div>
+                    <div class="bar-container bg-slate-800">
+                        <div id="s1-bar-req" class="bar-req"></div>
+                        <div id="s1-bar-equity" class="bar-equity"></div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2 text-right">Red line indicates requirement threshold.</p>
+                </div>
+            </div>
+
+            <!-- STEP 2: The Crash Scenarios -->
+            <div id="step-2" class="step-content glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-8 opacity-10">
+                    <i class="ph ph-trend-down text-9xl text-red-500"></i>
+                </div>
+                <h3 class="text-sm font-bold text-red-400 uppercase tracking-wider mb-2">Phase 2</h3>
+                <h2 class="text-3xl font-bold mb-6">Market Crash Scenarios</h2>
+                
+                <p class="text-slate-300 mb-6 max-w-xl text-lg leading-relaxed">
+                    As the stock price violently drops, the dynamic margin requirement scales up aggressively. Here is the cash required to add to avoid auto-liquidation.
+                </p>
+
+                <div id="s2-scenarios" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <!-- JS Injected Content -->
+                </div>
+            </div>
+
+            <!-- STEP 3: Assignment Scenarios -->
+            <div id="step-3" class="step-content glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-8 opacity-5">
+                    <i class="ph ph-receipt text-9xl"></i>
+                </div>
+                <h3 class="text-sm font-bold text-orange-400 uppercase tracking-wider mb-2">Phase 3</h3>
+                <h2 class="text-3xl font-bold mb-6">Assignment (Worst Case)</h2>
+                
+                <p class="text-slate-300 mb-6 text-lg leading-relaxed">
+                    Assuming you survive the Phase 2 calls, you are forced to buy the shares on margin. You must now maintain <span id="s3-maint-label" class="font-bold text-orange-400">30%</span> equity on the newly assigned stock value.
+                </p>
+
+                <div id="s3-scenarios" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <!-- JS Injected Content -->
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        
+        // Formatter for currency
+        const fmt = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            maximumFractionDigits: 0
+        });
+
+        function getInputs() {
+            return {
+                cash: parseFloat(document.getElementById('inpCash').value) || 0,
+                stock: parseFloat(document.getElementById('inpStock').value) || 0,
+                maint: parseFloat(document.getElementById('inpMaint').value) || 0,
+                strike: parseFloat(document.getElementById('inpStrike').value) || 0,
+                premium: parseFloat(document.getElementById('inpPremium').value) || 0,
+                contracts: parseFloat(document.getElementById('inpContracts').value) || 0,
+                months: parseFloat(document.getElementById('inpMonths').value) || 1
+            };
+        }
+
+        function calculateMetrics() {
+            const data = getInputs();
+            const shares = data.contracts * 100;
+            const totalPremium = data.premium * shares;
+            
+            // Fidelity Formula
+            const calcReq = (price) => {
+                const otm = Math.max(0, price - data.strike);
+                const formA = (0.25 * price - otm + data.premium) * shares;
+                const formB = (0.15 * data.strike + data.premium) * shares;
+                const req = Math.max(formA, formB);
+                return {
+                    req, formA, formB, otm,
+                    strA: `Form A: (25% of ${price} - ${otm} OTM + ${data.premium} Prem) * ${shares} = ${fmt.format(formA)}`,
+                    strB: `Form B: (15% of ${data.strike} + ${data.premium} Prem) * ${shares} = ${fmt.format(formB)}`
+                };
+            };
+
+            const initial = calcReq(data.stock);
+            const maintPct = data.maint / 100;
+            
+            // Returns Calculation
+            const annualizedPremium = totalPremium * 12;
+            const returnOnCash = data.cash > 0 ? (annualizedPremium / data.cash) * 100 : 0;
+            
+            // Generate matrix for 20%, 30%, 40%, 50% crash
+            const crashLevels = [0.2, 0.3, 0.4, 0.5];
+            
+            const scenarios = crashLevels.map(drop => {
+                const crashPrice = data.stock * (1 - drop);
+                
+                // Pre-assignment metrics
+                const crashCalc = calcReq(crashPrice);
+                const preAssignDeficit = Math.max(0, crashCalc.req - data.cash);
+                
+                // Post-assignment metrics
+                const costToBuy = data.strike * shares;
+                const marketValue = crashPrice * shares;
+                const loan = costToBuy - data.cash;
+                const equity = marketValue - loan;
+                const maintenanceReq = maintPct * marketValue;
+                const assignDeficit = Math.max(0, maintenanceReq - equity);
+
+                return {
+                    drop,
+                    crashPrice,
+                    crashCalc,
+                    preAssignDeficit,
+                    marketValue,
+                    loan,
+                    equity,
+                    maintenanceReq,
+                    assignDeficit,
+                    costToBuy
+                };
+            });
+
+            return {
+                cash: data.cash,
+                shares,
+                strike: data.strike,
+                initial,
+                maintPct,
+                returnOnCash,
+                totalPremium,
+                months: data.months,
+                scenarios
+            };
+        }
+
+        function updateUI() {
+            const metrics = calculateMetrics();
+            const showMath = document.getElementById('chkShowCalc').checked;
+
+            // STEP 1 UI
+            document.getElementById('s1-cash').innerText = fmt.format(metrics.cash);
+            document.getElementById('s1-req').innerText = fmt.format(metrics.initial.req);
+            document.getElementById('s1-return').innerText = `${metrics.returnOnCash.toFixed(1)}%`;
+            
+            // Step 1 Math
+            const s1Math = document.getElementById('s1-math');
+            s1Math.innerHTML = `
+                <div class="mb-1 text-slate-300">Initial Requirement (Greater of A or B)</div>
+                <div>${metrics.initial.strA}</div>
+                <div>${metrics.initial.strB}</div>
+                <div class="mt-2 text-slate-300">Annual Return Math</div>
+                <div>(${fmt.format(metrics.totalPremium)} Monthly Prem * 12 Months) / ${fmt.format(metrics.cash)} Cash = ${metrics.returnOnCash.toFixed(2)}%</div>
+            `;
+            s1Math.style.display = showMath ? 'block' : 'none';
+            
+            // Step 1 Bars
+            let s1Max = Math.max(metrics.cash, metrics.initial.req) * 1.2;
+            let reqPct1 = Math.min(100, (metrics.initial.req / s1Max) * 100);
+            let cashPct1 = Math.min(100, (metrics.cash / s1Max) * 100);
+            
+            document.getElementById('s1-bar-req').style.width = `${reqPct1}%`;
+            document.getElementById('s1-bar-equity').style.width = `${cashPct1}%`;
+            
+            if(metrics.cash >= metrics.initialReq) {
+                document.getElementById('s1-status').innerText = "Healthy Margin";
+                document.getElementById('s1-status').className = "text-emerald-400";
+            } else {
+                document.getElementById('s1-status').innerText = "Margin Call!";
+                document.getElementById('s1-status').className = "text-red-500 font-bold";
+            }
+
+            // STEP 2 & 3 UI (Dynamic Scenarios)
+            const s2Container = document.getElementById('s2-scenarios');
+            const s3Container = document.getElementById('s3-scenarios');
+            document.getElementById('s3-maint-label').innerText = `${(metrics.maintPct * 100).toFixed(0)}%`;
+            
+            s2Container.innerHTML = '';
+            s3Container.innerHTML = '';
+
+            metrics.scenarios.forEach(scen => {
+                // Generate Step 2 Cards (Pre-Assignment)
+                s2Container.innerHTML += `
+                    <div class="bg-slate-800/50 p-4 rounded-xl border ${scen.preAssignDeficit > 0 ? 'border-red-900/50 bg-red-900/10' : 'border-slate-700'}">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-bold text-slate-300">-${(scen.drop * 100).toFixed(0)}% Drop</span>
+                            <span class="text-xs px-2 py-1 rounded bg-slate-900 text-slate-400">Stock @ ${fmt.format(scen.crashPrice)}</span>
+                        </div>
+                        <div class="space-y-1 mt-3">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Options Margin Req:</span>
+                                <span class="fo
